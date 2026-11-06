@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="ml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SAR Rate">
+<title>SAR → INR റേറ്റ് ട്രാക്കർ</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--tx:#14171a;--mut:#667;--ac:#0a7d4f;--bd:#e2e5ea}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1214;--card:#1a1e22;--tx:#eceff1;--mut:#9aa4ab;--ac:#3ecf8e;--bd:#2b3138}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:16px/1.45 -apple-system,system-ui,"Noto Sans Malayalam",sans-serif;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+main{max-width:560px;margin:0 auto;padding:14px}
+h1{font-size:20px;margin:6px 0 2px}
+h2{font-size:16px;margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:12px 0}
+.big{font-size:34px;font-weight:700}
+.mut{color:var(--mut);font-size:13px}
+.row{display:flex;gap:8px;align-items:center;margin:6px 0}
+input{flex:1;min-width:0;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+button{font:inherit;padding:10px 14px;border-radius:10px;border:0;background:var(--ac);color:#fff;font-weight:600}
+button.ghost{background:transparent;color:var(--mut);border:1px solid var(--bd);margin-top:6px}
+.p{border-top:1px solid var(--bd);padding:10px 0}
+.p:first-of-type{border-top:0}
+details{margin-top:6px;font-size:14px}
+summary{color:var(--mut)}
+</style>
+</head>
+<body>
+<main>
+<h1>🇸🇦 SAR → 🇮🇳 INR</h1>
+<div class="mut" id="status">റേറ്റ് എടുക്കുന്നു…</div>
+
+<div class="card" id="top"></div>
+
+<div class="card">
+  <h2>തുക (SAR)</h2>
+  <div class="row"><input id="amt" inputmode="decimal"><button onclick="load();loadLive()">↻ പുതുക്കുക</button></div>
+</div>
+
+<div class="card">
+  <h2>പ്രൊവൈഡർ ഡെയ്‌ലി ലോഗ്</h2>
+  <div class="mut">ഓരോ ആപ്പിലും ഇന്ന് കാണുന്ന റേറ്റ് ഇവിടെ ചേർത്ത് സേവ് ചെയ്യുക. ദിവസം തോറും ഹിസ്റ്ററി തനിയെ രൂപപ്പെടും.</div>
+  <div id="prov"></div>
+  <div class="row"><input id="newp" placeholder="പുതിയ പ്രൊവൈഡർ (ഉദാ. Barq)"><button onclick="addP()">ചേർക്കുക</button></div>
+</div>
+
+<div class="card">
+  <h2>ബാക്കപ്പ്</h2>
+  <div class="mut">ഡാറ്റ ഈ ഫോണിലെ ബ്രൗസറിൽ മാത്രമാണ് സൂക്ഷിക്കുന്നത്. ഇടയ്ക്കിടെ ബാക്കപ്പ് എടുക്കുക.</div>
+  <div class="row"><button class="ghost" onclick="exp()">ബാക്കപ്പ് കോപ്പി</button><button class="ghost" onclick="imp()">റീസ്റ്റോർ</button></div>
+</div>
+
+<p class="mut">⚠️ ലൈവ് മിഡ്-മാർക്കറ്റ് റേറ്റ് ഏതാനും മണിക്കൂർ ഇടവേളയിൽ പുതുക്കുന്നു; അത് കിട്ടിയില്ലെങ്കിൽ ദിവസേനയുള്ള റേറ്റ് കാണിക്കും. ഇത് ഒരു എക്സ്ചേഞ്ചിന്റെയും റേറ്റോ ഫീസോ അല്ല — അയക്കുന്നതിന് മുമ്പ് ആപ്പിൽ ഫൈനൽ തുക നോക്കുക. പ്രൊവൈഡർ റേറ്റുകൾ നിങ്ങൾ ടൈപ്പ് ചെയ്യുന്നതാണ്.<br>ഇത് ഇന്നത്തെയും കഴിഞ്ഞ ദിവസങ്ങളിലെയും റേറ്റുകളുടെ താരതമ്യം മാത്രമാണ് — ഭാവി പ്രവചനമോ ഫൈനാൻഷ്യൽ അഡ്വൈസോ അല്ല.</p>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const fmt=(n,d=3)=>Number(n).toFixed(d);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Riyadh'});
+
+let hist=LS.get('hist',[]);
+let amount=LS.get('amount',1000);
+let live=null;
+let data=LS.get('data',{providers:[
+  {id:'alrajhi',name:'Al Rajhi (Tahweel)'},{id:'d360',name:'D360'},{id:'snb',name:'SNB'},
+  {id:'stcpay',name:'STC Pay'},{id:'enjaz',name:'Enjaz'}],log:{}});
+
+// Source: fawazahmed0/exchange-api (free, no key, daily). Fallback host recommended by its docs.
+async function getRate(tag){
+  const urls=[
+    `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${tag}/v1/currencies/sar.min.json`,
+    `https://${tag}.currency-api.pages.dev/v1/currencies/sar.min.json`];
+  for(const u of urls){
+    try{const r=await fetch(u);if(!r.ok)continue;const j=await r.json();
+      if(j&&j.sar&&j.sar.inr)return{d:j.date||tag,r:j.sar.inr}}catch(e){}
+  }
+  return null;
+}
+
+async function load(){
+  $('#status').textContent='പുതുക്കുന്നു…';
+  const tags=['latest'];
+  for(let i=0;i<30;i++)tags.push(new Date(Date.now()-i*864e5).toISOString().slice(0,10));
+  const res=(await Promise.all(tags.map(getRate))).filter(Boolean);
+  if(!res.length){$('#status').textContent='ഇന്റർനെറ്റ് പ്രശ്നം — സേവ് ചെയ്ത റേറ്റ് കാണിക്കുന്നു';renderTop();renderProv();return}
+  const m={};res.forEach(x=>m[x.d]=x);
+  hist=Object.values(m).sort((a,b)=>a.d<b.d?-1:1).slice(-30);
+  LS.set('hist',hist);
+  $('#status').textContent='പുതുക്കിയത്: '+new Date().toLocaleTimeString('en-GB',{timeZone:'Asia/Riyadh',hour:'2-digit',minute:'2-digit'})+' (സൗദി സമയം)';
+  renderTop();renderProv();
+}
+
+function stats(){
+  if(!hist.length)return null;
+  const v=hist.map(x=>x.r),t=live?live.r:v[v.length-1],lo=Math.min(...v,t),hi=Math.max(...v,t);
+  const av=v.reduce((a,b)=>a+b,0)/v.length,pos=hi>lo?(t-lo)/(hi-lo):.5;
+  return{t,lo,hi,av,pos,d:hist[hist.length-1].d};
+}
+
+function chart(s){
+  const W=300,H=110,P=6,lo=s.lo-.02,hi=s.hi+.02;
+  const x=i=>P+i*(W-2*P)/Math.max(hist.length-1,1),y=v=>H-P-(v-lo)/(hi-lo)*(H-2*P);
+  const pts=hist.map((h,i)=>x(i)+','+y(h.r)).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="30 ദിവസത്തെ ഗ്രാഫ്"><line x1="${P}" x2="${W-P}" y1="${y(s.av)}" y2="${y(s.av)}" stroke="var(--mut)" stroke-dasharray="4 3"/><polyline points="${pts}" fill="none" stroke="var(--ac)" stroke-width="2"/></svg>`;
+}
+
+function renderTop(){
+  const s=stats();
+  if(!s){$('#top').innerHTML='<div class="mut">റേറ്റ് ലഭ്യമല്ല. ഇന്റർനെറ്റ് പരിശോധിക്കുക.</div>';return}
+  const v=s.t>=s.av&&s.pos>=.6?['🟢','ഇന്ന് നല്ല ദിവസം — 30 ദിവസത്തെ ഉയർന്ന ഭാഗത്ത്']
+    :s.t>=s.av?['🟡','30 ദിവസത്തെ ശരാശരിക്ക് മുകളിൽ']:['🔴','കഴിഞ്ഞ 30 ദിവസത്തെ ശരാശരിയേക്കാൾ താഴെ'];
+  const diff=Math.round((s.t-s.av)*amount/10)*10;
+  $('#top').innerHTML=`<b>${v[0]} ${v[1]}</b>
+  <div class="big">₹${fmt(s.t,3)}</div>
+  <div class="mut">${live?'1 SAR · ലൈവ് മിഡ്-മാർക്കറ്റ് · '+liveTime():'1 SAR · മിഡ്-മാർക്കറ്റ് · ദിവസേനയുള്ള റേറ്റ്, തീയതി '+s.d}</div>${live&&live.limit?'<div class="mut">API ക്വാട്ട: '+live.used+' / '+live.limit+'</div>':''}
+  <div class="mut">30 ദിവസം: കുറഞ്ഞത് ₹${fmt(s.lo)} · ശരാശരി ₹${fmt(s.av)} · കൂടിയത് ₹${fmt(s.hi)}</div>
+  <div style="margin:6px 0">${amount} SAR: ശരാശരിയേക്കാൾ ₹${Math.abs(diff)} ${diff>=0?'കൂടുതൽ':'കുറവ്'}</div>
+  ${s.t<s.av?'<div class="mut">അത്യാവശ്യമല്ലെങ്കിൽ, ഓരോ ദിവസത്തെയും റേറ്റ് നോക്കി തീരുമാനിക്കാം.</div>':''}
+  ${chart(s)}<div class="mut">ഡാഷ് ലൈൻ = 30 ദിവസ ശരാശരി</div>`;
+}
+
+function renderProv(){
+  const s=stats(),td=today();
+  const rows=data.providers.map(p=>{
+    const l=data.log[p.id]||{},ds=Object.keys(l).sort(),pd=ds.filter(d=>d<td).pop();
+    return{p,l,ds,cur:l[td],prev:pd?{d:pd,r:l[pd]}:null};
+  }).sort((a,b)=>(b.cur||0)-(a.cur||0));
+  $('#prov').innerHTML=rows.map((x,i)=>{
+    const{p,l,ds,cur,prev}=x;
+    let info='<span class="mut">ഇന്നത്തെ റേറ്റ് ചേർത്തിട്ടില്ല</span>';
+    if(cur){
+      info=`${i===0?'🥇 ':''}<b>₹${fmt(cur)}</b>`;
+      if(s){const pct=(cur-s.t)/s.t*100;info+=` · മിഡ്-മാർക്കറ്റിനേക്കാൾ ${fmt(Math.abs(pct),2)}% ${pct>=0?'കൂടുതൽ':'കുറവ്'}`}
+      if(prev){const d=cur-prev.r;info+=`<br>${d>=0?'▲':'▼'} ${fmt(Math.abs(d))} (${prev.d}: ₹${fmt(prev.r)})`}
+    }
+    const h=ds.slice(-7).reverse().map(d=>`<div>${d} — ₹${fmt(l[d])}</div>`).join('')||'<div class="mut">ഹിസ്റ്ററി ഇല്ല</div>';
+    return `<div class="p"><b>${esc(p.name)}</b><div>${info}</div>
+    <div class="row"><input id="in-${p.id}" inputmode="decimal" placeholder="ഇന്നത്തെ റേറ്റ് (₹)" value="${cur||''}"><button onclick="save('${p.id}')">സേവ്</button></div>
+    <details><summary>ഹിസ്റ്ററി (അവസാന 7)</summary>${h}<button class="ghost" onclick="delP('${p.id}')">ഡിലീറ്റ്</button></details></div>`;
+  }).join('');
+}
+
+function save(id){
+  const el=document.getElementById('in-'+id);
+  const v=parseFloat(String(el.value).replace(',','.'));
+  if(!(v>0)){el.focus();return}
+  (data.log[id]=data.log[id]||{})[today()]=v;
+  LS.set('data',data);renderProv();
+}
+function addP(){
+  const el=$('#newp'),n=el.value.trim();
+  if(!n)return;
+  data.providers.push({id:'p'+Date.now(),name:n});
+  el.value='';LS.set('data',data);renderProv();
+}
+function delP(id){
+  if(!confirm('ഈ പ്രൊവൈഡറും അതിന്റെ ഹിസ്റ്ററിയും ഡിലീറ്റ് ചെയ്യണോ?'))return;
+  data.providers=data.providers.filter(p=>p.id!==id);delete data.log[id];
+  LS.set('data',data);renderProv();
+}
+async function exp(){
+  const t=JSON.stringify(data);
+  try{await navigator.clipboard.writeText(t);alert('ബാക്കപ്പ് കോപ്പി ചെയ്തു. Notes ആപ്പിൽ പേസ്റ്റ് ചെയ്ത് സൂക്ഷിക്കുക.')}
+  catch(e){prompt('ഇത് കോപ്പി ചെയ്യുക',t)}
+}
+function imp(){
+  const t=prompt('ബാക്കപ്പ് ഇവിടെ പേസ്റ്റ് ചെയ്യുക');
+  if(!t)return;
+  try{const d=JSON.parse(t);if(!d.providers||!d.log)throw 0;data=d;LS.set('data',data);renderProv()}
+  catch(e){alert('ബാക്കപ്പ് ശരിയല്ല')}
+}
+
+function liveTime(){
+  try{return new Date(live.t).toLocaleString('en-GB',{timeZone:'Asia/Riyadh',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})+' (സൗദി സമയം)'}catch(e){return ''}
+}
+async function loadLive(){
+  try{
+    const r=await fetch('/api/rate');
+    if(!r.ok)throw 0;
+    const j=await r.json();
+    if(!(j.rate>0))throw 0;
+    live={r:j.rate,t:j.time,used:j.used,limit:j.limit};
+  }catch(e){live=null}
+  renderTop();renderProv();
+}
+
+$('#amt').value=amount;
+$('#amt').addEventListener('input',e=>{const v=parseFloat(String(e.target.value).replace(',','.'));if(v>0){amount=v;LS.set('amount',v);renderTop()}});
+renderTop();renderProv();load();loadLive();
+</script>
+</body>
+</html>
